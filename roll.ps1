@@ -10,14 +10,18 @@ $YLW  = "$ESC[33m"  # yellow text
 $RST  = "$ESC[0m"   # reset all
 
 # --- Ability/skill check data ---
-$Abilities = @("str","dex","con","int","wis","cha")
-$SkillMap  = @{
+$Abilities    = @("str","dex","con","int","wis","cha")
+$SkillMap     = @{
     "acrobatics"      = "dex"; "animal handling" = "wis"; "arcana"        = "int"
     "athletics"       = "str"; "deception"       = "cha"; "history"       = "int"
     "insight"         = "wis"; "intimidation"    = "cha"; "investigation" = "int"
     "medicine"        = "wis"; "nature"          = "int"; "perception"    = "wis"
     "performance"     = "cha"; "persuasion"      = "cha"; "religion"      = "int"
     "sleight of hand" = "dex"; "stealth"         = "dex"; "survival"      = "wis"
+}
+$SkillAliases = @{
+    "animal"  = "animal handling"
+    "sleight" = "sleight of hand"
 }
 
 # --- Parse arguments ---
@@ -27,16 +31,36 @@ $DC          = $null
 $Silent      = $false
 $CheckName   = ""
 
+# Separate --silent from positional args
+$posArgs = [System.Collections.ArrayList]@()
 foreach ($arg in $args) {
-    if ($arg -eq "--silent") {
-        $Silent = $true
-    } else {
-        $lower = $arg.ToLower()
-        if ($Abilities -contains $lower -or $SkillMap.ContainsKey($lower)) {
-            $CheckName = $lower
-        } elseif ($arg -match '[dD]') {
-            $DiceStr = $lower
-        } elseif ($DiceStr -eq "" -and $CheckName -eq "") {
+    if ($arg -eq "--silent") { $Silent = $true } else { [void]$posArgs.Add($arg) }
+}
+
+# Scan positional args for an ability/skill name.
+# Try longest match first (3 tokens, then 2, then 1) to support multi-word skills
+# ("sleight of hand", "animal handling") as well as single-word shorthands.
+for ($i = 0; $i -lt $posArgs.Count -and $CheckName -eq ""; $i++) {
+    foreach ($len in @(3, 2, 1)) {
+        if ($i + $len -le $posArgs.Count) {
+            $candidate = ($posArgs[$i..($i + $len - 1)] -join " ").ToLower()
+            if ($Abilities -contains $candidate -or $SkillMap.ContainsKey($candidate) -or $SkillAliases.ContainsKey($candidate)) {
+                $CheckName = if ($SkillAliases.ContainsKey($candidate)) { $SkillAliases[$candidate] } else { $candidate }
+                if ($i -gt 0 -and $posArgs[0] -match '^\d+$')           { $RepeatCount = [int]$posArgs[0] }
+                $afterIdx = $i + $len
+                if ($afterIdx -lt $posArgs.Count -and $posArgs[$afterIdx] -match '^\d+$') { $DC = [int]$posArgs[$afterIdx] }
+                break
+            }
+        }
+    }
+}
+
+# No check found — parse normally for a dice expression
+if ($CheckName -eq "") {
+    foreach ($arg in $posArgs) {
+        if ($arg -match '[dD]') {
+            $DiceStr = $arg.ToLower()
+        } elseif ($DiceStr -eq "") {
             if ($arg -match '^\d+$') { $RepeatCount = [int]$arg }
         } else {
             if ($arg -match '^\d+$') { $DC = [int]$arg }
