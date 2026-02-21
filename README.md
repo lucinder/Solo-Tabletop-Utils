@@ -8,6 +8,12 @@ roll [num rolls] <num dice>d<die size>[kh/kl][num dice to keep] [DC]
 ```
 Num dice and die size are required; all other params are optional.
 
+Alternatively, you can roll a stat from a cached sheet (in Character Sheets/CACHE.json, if it exists):
+```powershell
+roll [skill/stat]
+```
+e.g. `roll str` or `roll perception`.
+
 ## Character Sheet Generator (D&D 5e)
 Usage:
 ```powershell
@@ -28,3 +34,10 @@ Optional parameters:
 -o, --output: Output file to save attributes to (default: character.json in the Character Sheets folder).
 --interactive: Prompt the user interactively for character attributes rather than using command-line arguments.
 ```
+
+### Sheet Caching
+You can cache the values of a stored character sheet json file by using the `loadchar.ps1` script.
+```powershell
+loadchar [filename]
+```
+Include only the file name, not the path- this loader only looks in the Character Sheets folder. Once cached, rolling stats or skills with the `roll` command uses the values stored in the cached sheet.
