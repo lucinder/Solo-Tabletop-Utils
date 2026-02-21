@@ -4,6 +4,6 @@ CLI Utils for running solo TTRPGS in Windows. Right now, this is just a shell sc
 ## Dice Roller
 Usage:
 ```powershell
-roll [num rolls] {num dice}d{die size}[kh/kl][num dice to keep] [DC]
+roll [num rolls] <num dice>d<die size>[kh/kl][num dice to keep] [DC]
 ```
 Num dice and die size are required; all other params are optional.
