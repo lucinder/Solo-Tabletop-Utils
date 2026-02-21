@@ -1,4 +1,10 @@
+# Claude
+CLAUDE.md
 claude*
-logs*
+
+# Cache
 *__pycache__*
-Character Sheets/*
+
+# Other Stuff
+logs*
+Character Sheets/*.json

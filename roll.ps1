@@ -9,31 +9,72 @@ $RED  = "$ESC[31m"  # red text
 $YLW  = "$ESC[33m"  # yellow text
 $RST  = "$ESC[0m"   # reset all
 
+# --- Ability/skill check data ---
+$Abilities = @("str","dex","con","int","wis","cha")
+$SkillMap  = @{
+    "acrobatics"      = "dex"; "animal handling" = "wis"; "arcana"        = "int"
+    "athletics"       = "str"; "deception"       = "cha"; "history"       = "int"
+    "insight"         = "wis"; "intimidation"    = "cha"; "investigation" = "int"
+    "medicine"        = "wis"; "nature"          = "int"; "perception"    = "wis"
+    "performance"     = "cha"; "persuasion"      = "cha"; "religion"      = "int"
+    "sleight of hand" = "dex"; "stealth"         = "dex"; "survival"      = "wis"
+}
+
 # --- Parse arguments ---
 $RepeatCount = 1
 $DiceStr     = ""
 $DC          = $null
 $Silent      = $false
+$CheckName   = ""
 
 foreach ($arg in $args) {
     if ($arg -eq "--silent") {
         $Silent = $true
-    } elseif ($arg -match '[dD]') {
-        $DiceStr = $arg.ToLower()
-    } elseif ($DiceStr -eq "") {
-        if ($arg -match '^\d+$') { $RepeatCount = [int]$arg }
     } else {
-        if ($arg -match '^\d+$') { $DC = [int]$arg }
+        $lower = $arg.ToLower()
+        if ($Abilities -contains $lower -or $SkillMap.ContainsKey($lower)) {
+            $CheckName = $lower
+        } elseif ($arg -match '[dD]') {
+            $DiceStr = $lower
+        } elseif ($DiceStr -eq "" -and $CheckName -eq "") {
+            if ($arg -match '^\d+$') { $RepeatCount = [int]$arg }
+        } else {
+            if ($arg -match '^\d+$') { $DC = [int]$arg }
+        }
     }
 }
 
-if ($DiceStr -eq "") {
-    Write-Host "Usage: r [repeat] XdY[kh[Z]|kl[Z]] [DC] [--silent]"
-    Write-Host "  r 3d20        Roll 3d20"
-    Write-Host "  r 2d10kh1     Roll 2d10, keep highest 1"
-    Write-Host "  r 7 d20       Roll d20 seven times"
-    Write-Host "  r d20 15      Roll d20 against DC 15"
+if ($DiceStr -eq "" -and $CheckName -eq "") {
+    Write-Host "Usage: roll [repeat] XdY[kh[Z]|kl[Z]][+/-N] [DC] [--silent]"
+    Write-Host "       roll [repeat] <ability|skill> [DC] [--silent]"
+    Write-Host "  roll 3d20          Roll 3d20"
+    Write-Host "  roll 2d10kh1       Roll 2d10, keep highest 1"
+    Write-Host "  roll d20+5 15      Roll d20+5 against DC 15"
+    Write-Host "  roll str           Strength check (uses CACHE.json)"
+    Write-Host "  roll perception 15 Perception check against DC 15"
     exit
+}
+
+# --- Resolve named ability/skill check into a dice expression ---
+if ($CheckName -ne "") {
+    $cachePath = Join-Path $PSScriptRoot "Character Sheets\CACHE.json"
+    if (-not (Test-Path $cachePath)) {
+        Write-Host "Error: No cached character sheet found at 'Character Sheets\CACHE.json'."
+        Write-Host "Create one to use ability/skill checks."
+        exit
+    }
+    $sheet      = Get-Content $cachePath -Raw | ConvertFrom-Json
+    $ability    = if ($Abilities -contains $CheckName) { $CheckName } else { $SkillMap[$CheckName] }
+    $statScore  = $sheet.stats.$ability
+    $profEntry  = $sheet.proficiencies | Where-Object { ($_ -replace '\*$') -eq $CheckName } | Select-Object -First 1
+    $isExpert   = $null -ne $profEntry -and $profEntry.EndsWith('*')
+    $isProf     = $null -ne $profEntry -and ($Abilities -notcontains $CheckName)
+    $pbMult     = if ($isExpert) { 2 } elseif ($isProf) { 1 } else { 0 }
+    $totalMod   = [Math]::Floor(($statScore - 10) / 2) + ($pbMult * $sheet.proficiency_bonus)
+
+    if     ($totalMod -gt 0) { $DiceStr = "d20+$totalMod" }
+    elseif ($totalMod -lt 0) { $DiceStr = "d20$totalMod"  }
+    else                     { $DiceStr = "d20"            }
 }
 
 # --- Parse dice format: [X]d[Y][k[h|l][Z]][+/-N] ---
@@ -57,6 +98,16 @@ $DiceLabel = "${NumDice}d${Sides}"
 if ($KeepType) { $DiceLabel += "k${KeepType}${KeepCount}" }
 if ($Modifier -gt 0) { $DiceLabel += "+${Modifier}" }
 elseif ($Modifier -lt 0) { $DiceLabel += "${Modifier}" }
+
+if ($CheckName -ne "") {
+    $displayName = if ($Abilities -contains $CheckName) {
+        $CheckName.ToUpper()
+    } else {
+        (Get-Culture).TextInfo.ToTitleCase($CheckName)
+    }
+    $modStr    = if ($Modifier -gt 0) { "+$Modifier" } elseif ($Modifier -lt 0) { "$Modifier" } else { "" }
+    $DiceLabel = "$displayName (d20$modStr)"
+}
 
 # --- Roll function ---
 function Invoke-DiceRoll {
