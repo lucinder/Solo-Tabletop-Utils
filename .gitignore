@@ -1,2 +1,4 @@
 claude*
 logs*
+*__pycache__*
+Character Sheets/*
