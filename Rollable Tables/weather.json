@@ -1,0 +1,17 @@
+{
+    "roll":"1d10",
+    "results":[
+        {
+        "1": "Blizzard",
+        "2": "Snow Flurries",
+        "3": "Freezing Cold",
+        "4": "Thunder Storm",
+        "5": "Heavy Rain",
+        "6": "Light Rain",
+        "7": "Heavy Clouds",
+        "8": "High Winds",
+        "9": "Clear Skies",
+        "10": "Scorching Heat"
+        }
+    ]
+}

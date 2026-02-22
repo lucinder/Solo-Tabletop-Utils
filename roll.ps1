@@ -101,41 +101,118 @@ if ($CheckName -ne "") {
     else                     { $DiceStr = "d20"            }
 }
 
-# --- Parse dice format: [X]d[Y][k[h|l][Z]][+/-N] ---
-if ($DiceStr -notmatch '^(\d*)d(\d+)(k([hl])(\d*))?([+-]\d+)?$') {
-    Write-Host "Error: Invalid dice format '$DiceStr'"
-    Write-Host "Expected: XdY, dY, XdYkhZ, XdYklZ, XdY+N, XdY-N, etc."
-    exit
-}
+# --- Parse dice expression ---
+$DiceGroups = $null  # $null = single-group mode
 
-$NumDice   = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
-$Sides     = [int]$Matches[2]
-$KeepType  = if ($Matches[4]) { $Matches[4] } else { "" }
-$KeepCount = if ($KeepType -and $Matches[5]) { [int]$Matches[5] } `
-             elseif ($KeepType)               { 1 } `
-             else                             { 0 }
-$Modifier  = if ($Matches[6]) { [int]$Matches[6] } else { 0 }
+if ($DiceStr -match '^(\d*)d(\d+)(k([hl])(\d*))?([+-]\d+)?$') {
+    # Single-group (standard format, backward-compatible)
+    $NumDice   = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
+    $Sides     = [int]$Matches[2]
+    $KeepType  = if ($Matches[4]) { $Matches[4] } else { "" }
+    $KeepCount = if ($KeepType -and $Matches[5]) { [int]$Matches[5] } `
+                 elseif ($KeepType)               { 1 } `
+                 else                             { 0 }
+    $Modifier  = if ($Matches[6]) { [int]$Matches[6] } else { 0 }
 
-if ($KeepType -and $KeepCount -gt $NumDice) { $KeepCount = $NumDice }
+    if ($KeepType -and $KeepCount -gt $NumDice) { $KeepCount = $NumDice }
 
-$DiceLabel = "${NumDice}d${Sides}"
-if ($KeepType) { $DiceLabel += "k${KeepType}${KeepCount}" }
-if ($Modifier -gt 0) { $DiceLabel += "+${Modifier}" }
-elseif ($Modifier -lt 0) { $DiceLabel += "${Modifier}" }
+    $DiceLabel = "${NumDice}d${Sides}"
+    if ($KeepType) { $DiceLabel += "k${KeepType}${KeepCount}" }
+    if ($Modifier -gt 0) { $DiceLabel += "+${Modifier}" }
+    elseif ($Modifier -lt 0) { $DiceLabel += "${Modifier}" }
 
-if ($CheckName -ne "") {
-    $displayName = if ($Abilities -contains $CheckName) {
-        $CheckName.ToUpper()
-    } else {
-        (Get-Culture).TextInfo.ToTitleCase($CheckName)
+    if ($CheckName -ne "") {
+        $displayName = if ($Abilities -contains $CheckName) {
+            $CheckName.ToUpper()
+        } else {
+            (Get-Culture).TextInfo.ToTitleCase($CheckName)
+        }
+        $modStr    = if ($Modifier -gt 0) { "+$Modifier" } elseif ($Modifier -lt 0) { "$Modifier" } else { "" }
+        $DiceLabel = "$displayName (d20$modStr)"
     }
-    $modStr    = if ($Modifier -gt 0) { "+$Modifier" } elseif ($Modifier -lt 0) { "$Modifier" } else { "" }
-    $DiceLabel = "$displayName (d20$modStr)"
+} else {
+    # Multi-group: split on + and - boundaries, parse each term as a dice group or constant
+    $DiceGroups = @()
+    $parts = $DiceStr -split '(?=[+-])' | Where-Object { $_ -ne "" }
+    foreach ($part in $parts) {
+        if ($part -match '^([+-]?)(\d*)d(\d+)(k([hl])(\d*))?$') {
+            $sign = if ($Matches[1] -eq '-') { -1 } else { 1 }
+            $nd   = if ($Matches[2]) { [int]$Matches[2] } else { 1 }
+            $si   = [int]$Matches[3]
+            $kt   = if ($Matches[5]) { $Matches[5] } else { "" }
+            $kc   = if ($kt -and $Matches[6]) { [int]$Matches[6] } elseif ($kt) { 1 } else { 0 }
+            if ($kt -and $kc -gt $nd) { $kc = $nd }
+            $DiceGroups += @{ IsNumber=$false; Sign=$sign; NumDice=$nd; Sides=$si; KeepType=$kt; KeepCount=$kc }
+        } elseif ($part -match '^([+-]?\d+)$') {
+            $DiceGroups += @{ IsNumber=$true; Value=[int]$Matches[1] }
+        } else {
+            Write-Host "Error: Invalid term '$part' in expression '$DiceStr'"
+            exit
+        }
+    }
+    if ($DiceGroups.Count -lt 2) {
+        Write-Host "Error: Invalid dice expression '$DiceStr'"
+        exit
+    }
+    $DiceLabel = $DiceStr
 }
 
 # --- Roll function ---
 function Invoke-DiceRoll {
-    # Roll all dice
+    if ($null -ne $DiceGroups) {
+        # Multi-group roll: iterate each term, roll dice, accumulate total and display strings
+        $total         = 0
+        $groupDisplays = @()
+
+        foreach ($grp in $DiceGroups) {
+            if ($grp.IsNumber) {
+                $total += $grp.Value
+                $groupDisplays += @{ Str=$([Math]::Abs($grp.Value).ToString()); SignStr=if ($grp.Value -ge 0) { "+" } else { "-" } }
+            } else {
+                $rolls    = @(1..$grp.NumDice | ForEach-Object { Get-Random -Minimum 1 -Maximum ($grp.Sides + 1) })
+                $keepMask = New-Object int[] $grp.NumDice
+                $grpTotal = 0
+
+                if ($grp.KeepType) {
+                    $indexed = 0..($grp.NumDice-1) | ForEach-Object { [PSCustomObject]@{ Value=$rolls[$_]; Index=$_ } }
+                    $sorted  = $indexed | Sort-Object Value
+                    if ($grp.KeepType -eq "h") { $sorted | Select-Object -Last  $grp.KeepCount | ForEach-Object { $keepMask[$_.Index] = 1 } }
+                    else                        { $sorted | Select-Object -First $grp.KeepCount | ForEach-Object { $keepMask[$_.Index] = 1 } }
+                    for ($i = 0; $i -lt $grp.NumDice; $i++) { if ($keepMask[$i]) { $grpTotal += $rolls[$i] } }
+                } else {
+                    $grpTotal = ($rolls | Measure-Object -Sum).Sum
+                }
+
+                $total   += $grp.Sign * $grpTotal
+                $parts    = 0..($grp.NumDice-1) | ForEach-Object {
+                    if ($grp.KeepType -and -not $keepMask[$_]) { "${ST}$($rolls[$_])${RST}" } else { "$($rolls[$_])" }
+                }
+                $str      = if ($grp.NumDice -gt 1) { "[" + ($parts -join ", ") + "]" } else { $parts[0] }
+                $groupDisplays += @{ Str=$str; SignStr=if ($grp.Sign -ge 0) { "+" } else { "-" } }
+            }
+        }
+
+        $displayParts = @($groupDisplays[0].Str)
+        for ($i = 1; $i -lt $groupDisplays.Count; $i++) {
+            $displayParts += "$($groupDisplays[$i].SignStr) $($groupDisplays[$i].Str)"
+        }
+        $displayStr = $displayParts -join " "
+        $rollLabel  = "${DiceLabel}: "
+        if ($null -ne $DC) {
+            if ($total -ge $DC) { $rollLabel += "${GRN}${displayStr}${RST}" } else { $rollLabel += "${RED}${displayStr}${RST}" }
+        } else { $rollLabel += $displayStr }
+
+        if ($RepeatCount -gt 1) {
+            Write-Host $rollLabel
+        } else {
+            Write-Host "Rolling $rollLabel"
+            if ($null -ne $DC) { Write-Host "${BOLD}${YLW}Total: ${total} (1 successes, 0 failures)${RST}" }
+            else                { Write-Host "${BOLD}${YLW}Total: ${total}${RST}" }
+        }
+        return $total
+    }
+
+    # Single-group roll
     $rolls = @(1..$NumDice | ForEach-Object { Get-Random -Minimum 1 -Maximum ($Sides + 1) })
     $keepMask = New-Object int[] $NumDice
     $total    = 0

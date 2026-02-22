@@ -1,0 +1,35 @@
+{
+    "roll":"1d6+1d8+1d10",
+    "results":[
+        {
+        "1": "Broken",
+        "2": "Improvised",
+        "3": "Rough",
+        "4": "Simple",
+        "5": "Martial",
+        "6": "Masterwork"
+        },
+        {
+        "1": "Wood",
+        "2": "Bone",
+        "3": "Iron",
+        "4": "Bronze",
+        "5": "Steel",
+        "6": "Silver",
+        "7": "Mithril",
+        "8": "Adamantine"
+        },
+        {
+        "1": "Axe",
+        "2": "Hammer/Maul",
+        "3": "Long Polearm",
+        "4": "Spear/Javelin",
+        "5": "Flail",
+        "6": "Sword/Dagger",
+        "7": "Staff/Wand",
+        "8": "Bow/Crossbow",
+        "9": "Firearm",
+        "10": "Exotic"
+        }
+    ]
+}

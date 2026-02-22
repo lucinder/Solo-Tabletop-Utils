@@ -41,3 +41,7 @@ You can cache the values of a stored character sheet json file by using the `loa
 loadchar [filename]
 ```
 Include only the file name, not the path- this loader only looks in the Character Sheets folder. Once cached, rolling stats or skills with the `roll` command uses the values stored in the cached sheet.
+
+### Additional Credits
+- Dice rolling sound effect is from [Sound Effect Generator](https://soundeffectgenerator.org/audio-editor?url=https%3A%2F%2Fstore.soundeffectgenerator.org%2Finstants%2Fdice-roll-sound-effect%2F71e08973-rolling-dice.mp3). This is the same SFX used by Foundry VTT in their software!
+- Some rollable tables are derived from [Juice Oracle](https://thunder9861.itch.io/juice-oracle).
