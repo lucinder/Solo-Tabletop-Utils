@@ -198,9 +198,9 @@ function Invoke-DiceRoll {
                 }
 
                 $total   += $grp.Sign * $grpTotal
-                $parts    = 0..($grp.NumDice-1) | ForEach-Object {
+                $parts    = @(0..($grp.NumDice-1) | ForEach-Object {
                     if ($grp.KeepType -and -not $keepMask[$_]) { "${ST}$($rolls[$_])${RST}" } else { "$($rolls[$_])" }
-                }
+                })
                 $str      = if ($grp.NumDice -gt 1) { "[" + ($parts -join ", ") + "]" } else { $parts[0] }
                 $groupDisplays += @{ Str=$str; SignStr=if ($grp.Sign -ge 0) { "+" } else { "-" } }
             }
