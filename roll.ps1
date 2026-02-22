@@ -30,6 +30,9 @@ $DiceStr     = ""
 $DC          = $null
 $Silent      = $false
 $CheckName   = ""
+$TableName   = ""
+$TableFile   = ""
+$TableDir    = Join-Path $PSScriptRoot "Rollable Tables"
 
 # Separate --silent from positional args
 $posArgs = [System.Collections.ArrayList]@()
@@ -37,15 +40,24 @@ foreach ($arg in $args) {
     if ($arg -eq "--silent") { $Silent = $true } else { [void]$posArgs.Add($arg) }
 }
 
-# Scan positional args for an ability/skill name.
-# Try longest match first (3 tokens, then 2, then 1) to support multi-word skills
-# ("sleight of hand", "animal handling") as well as single-word shorthands.
-for ($i = 0; $i -lt $posArgs.Count -and $CheckName -eq ""; $i++) {
+# Scan positional args for a table name or ability/skill name.
+# Try longest match first (3 tokens, then 2, then 1) to support multi-word names.
+for ($i = 0; $i -lt $posArgs.Count -and $CheckName -eq "" -and $TableName -eq ""; $i++) {
     foreach ($len in @(3, 2, 1)) {
         if ($i + $len -le $posArgs.Count) {
-            $candidate = ($posArgs[$i..($i + $len - 1)] -join " ").ToLower()
-            if ($Abilities -contains $candidate -or $SkillMap.ContainsKey($candidate) -or $SkillAliases.ContainsKey($candidate)) {
-                $CheckName = if ($SkillAliases.ContainsKey($candidate)) { $SkillAliases[$candidate] } else { $candidate }
+            $candidate = ($posArgs[$i..($i + $len - 1)] -join " ")
+            # Check rollable table first
+            $tPath = Join-Path $TableDir "$candidate.json"
+            if ((Test-Path $TableDir) -and (Test-Path $tPath)) {
+                $TableName = $candidate
+                $TableFile = $tPath
+                if ($i -gt 0 -and $posArgs[0] -match '^\d+$') { $RepeatCount = [int]$posArgs[0] }
+                break
+            }
+            # Then check ability/skill
+            $lower = $candidate.ToLower()
+            if ($Abilities -contains $lower -or $SkillMap.ContainsKey($lower) -or $SkillAliases.ContainsKey($lower)) {
+                $CheckName = if ($SkillAliases.ContainsKey($lower)) { $SkillAliases[$lower] } else { $lower }
                 if ($i -gt 0 -and $posArgs[0] -match '^\d+$')           { $RepeatCount = [int]$posArgs[0] }
                 $afterIdx = $i + $len
                 if ($afterIdx -lt $posArgs.Count -and $posArgs[$afterIdx] -match '^\d+$') { $DC = [int]$posArgs[$afterIdx] }
@@ -55,8 +67,8 @@ for ($i = 0; $i -lt $posArgs.Count -and $CheckName -eq ""; $i++) {
     }
 }
 
-# No check found — parse normally for a dice expression
-if ($CheckName -eq "") {
+# No check/table found — parse normally for a dice expression
+if ($CheckName -eq "" -and $TableName -eq "") {
     foreach ($arg in $posArgs) {
         if ($arg -match '[dD]') {
             $DiceStr = $arg.ToLower()
@@ -68,14 +80,16 @@ if ($CheckName -eq "") {
     }
 }
 
-if ($DiceStr -eq "" -and $CheckName -eq "") {
+if ($DiceStr -eq "" -and $CheckName -eq "" -and $TableName -eq "") {
     Write-Host "Usage: roll [repeat] XdY[kh[Z]|kl[Z]][+/-N] [DC] [--silent]"
     Write-Host "       roll [repeat] <ability|skill> [DC] [--silent]"
+    Write-Host "       roll [repeat] <table name> [--silent]"
     Write-Host "  roll 3d20          Roll 3d20"
     Write-Host "  roll 2d10kh1       Roll 2d10, keep highest 1"
     Write-Host "  roll d20+5 15      Roll d20+5 against DC 15"
     Write-Host "  roll str           Strength check (uses CACHE.json)"
     Write-Host "  roll perception 15 Perception check against DC 15"
+    Write-Host "  roll weather       Roll on the weather table"
     exit
 }
 
@@ -130,7 +144,7 @@ if ($DiceStr -match '^(\d*)d(\d+)(k([hl])(\d*))?([+-]\d+)?$') {
         $modStr    = if ($Modifier -gt 0) { "+$Modifier" } elseif ($Modifier -lt 0) { "$Modifier" } else { "" }
         $DiceLabel = "$displayName (d20$modStr)"
     }
-} else {
+} elseif ($DiceStr -ne "") {
     # Multi-group: split on + and - boundaries, parse each term as a dice group or constant
     $DiceGroups = @()
     $parts = $DiceStr -split '(?=[+-])' | Where-Object { $_ -ne "" }
@@ -280,6 +294,71 @@ function Invoke-DiceSound {
         $psi.UseShellExecute = $false
         [System.Diagnostics.Process]::Start($psi) | Out-Null
     } catch { }
+}
+
+# --- Roll table ---
+if ($TableName -ne "") {
+    $table    = Get-Content $TableFile -Raw | ConvertFrom-Json
+    $rollExpr = $table.roll.ToLower()
+
+    # Parse the roll expression into groups
+    $tGroups = @()
+    $tParts  = $rollExpr -split '(?=[+-])' | Where-Object { $_ -ne "" }
+    foreach ($part in $tParts) {
+        if ($part -match '^([+-]?)(\d*)d(\d+)(k([hl])(\d*))?$') {
+            $sign = if ($Matches[1] -eq '-') { -1 } else { 1 }
+            $nd   = if ($Matches[2]) { [int]$Matches[2] } else { 1 }
+            $si   = [int]$Matches[3]
+            $kt   = if ($Matches[5]) { $Matches[5] } else { "" }
+            $kc   = if ($kt -and $Matches[6]) { [int]$Matches[6] } elseif ($kt) { 1 } else { 0 }
+            if ($kt -and $kc -gt $nd) { $kc = $nd }
+            $tGroups += @{ Sign=$sign; NumDice=$nd; Sides=$si; KeepType=$kt; KeepCount=$kc }
+        }
+    }
+
+    Invoke-DiceSound
+    for ($r = 1; $r -le $RepeatCount; $r++) {
+        $outcomes    = @()
+        $diceDisplay = @()
+
+        for ($g = 0; $g -lt $tGroups.Count; $g++) {
+            $grp      = $tGroups[$g]
+            $rolls    = @(1..$grp.NumDice | ForEach-Object { Get-Random -Minimum 1 -Maximum ($grp.Sides + 1) })
+            $keepMask = New-Object int[] $grp.NumDice
+            $grpTotal = 0
+
+            if ($grp.KeepType) {
+                $indexed = 0..($grp.NumDice-1) | ForEach-Object { [PSCustomObject]@{ Value=$rolls[$_]; Index=$_ } }
+                $sorted  = $indexed | Sort-Object Value
+                if ($grp.KeepType -eq "h") { $sorted | Select-Object -Last  $grp.KeepCount | ForEach-Object { $keepMask[$_.Index] = 1 } }
+                else                        { $sorted | Select-Object -First $grp.KeepCount | ForEach-Object { $keepMask[$_.Index] = 1 } }
+                for ($i = 0; $i -lt $grp.NumDice; $i++) { if ($keepMask[$i]) { $grpTotal += $rolls[$i] } }
+            } else {
+                $grpTotal = ($rolls | Measure-Object -Sum).Sum
+            }
+
+            $parts = 0..($grp.NumDice-1) | ForEach-Object {
+                if ($grp.KeepType -and -not $keepMask[$_]) { "${ST}$($rolls[$_])${RST}" } else { "$($rolls[$_])" }
+            }
+            $str = if ($grp.NumDice -gt 1) { "[" + ($parts -join ", ") + "]" } else { $parts[0] }
+            $diceDisplay += $str
+
+            if ($g -lt $table.results.Count) {
+                $outcome = $table.results[$g].("$grpTotal")
+                $outcomes += if ($null -ne $outcome) { $outcome } else { "($grpTotal)" }
+            }
+        }
+
+        $diceStr2   = $diceDisplay -join " + "
+        $outcomeStr = $outcomes -join ", "
+        if ($RepeatCount -gt 1) {
+            Write-Host "${TableName}: $diceStr2 → ${BOLD}$outcomeStr${RST}"
+        } else {
+            Write-Host "Rolling ${TableName} ($rollExpr): $diceStr2"
+            Write-Host "${BOLD}${YLW}Result: $outcomeStr${RST}"
+        }
+    }
+    exit
 }
 
 # --- Execute rolls ---
