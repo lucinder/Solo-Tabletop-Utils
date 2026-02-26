@@ -37,7 +37,8 @@ cached_sheet = {
         "wis": 10,
         "cha": 10
     },
-    "proficiencies": []
+    "proficiencies": [],
+    "inventory":[]
 }
 
 def build_sheet(args):
