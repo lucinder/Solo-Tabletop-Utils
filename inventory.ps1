@@ -8,7 +8,7 @@ param(
     [Alias('a')][switch]$Add,
     [Alias('r')][switch]$Remove,
     [Alias('q')][int]$Qty = 1,
-    [Parameter(ValueFromRemainingArguments=$true)][string[]]$Item
+    [Parameter(Position=0, ValueFromRemainingArguments=$true)][string[]]$Item
 )
 
 $cachePath = Join-Path $PSScriptRoot "Character Sheets\CACHE.json"
@@ -21,8 +21,17 @@ if (-not (Test-Path $cachePath)) {
 $sheet = Get-Content $cachePath -Raw | ConvertFrom-Json
 
 # Normalize inventory: JSON {} becomes a PSCustomObject, [] becomes an array.
-# Treat anything that isn't already an array as an empty inventory.
-$inv = if ($sheet.inventory -is [array]) { @($sheet.inventory) } else { @() }
+# PS5.1 ConvertTo-Json also collapses a single-element array to a plain object on save,
+# so a one-item inventory reads back as a PSCustomObject with a 'name' property.
+# Use if-statement form (not if-expression) so @() assignment is direct and never
+# pipeline-unrolled into a bare PSCustomObject.
+if ($sheet.inventory -is [array]) {
+    $inv = @($sheet.inventory)
+} elseif ($null -ne $sheet.inventory -and $sheet.inventory.PSObject.Properties['name']) {
+    $inv = @($sheet.inventory)   # single item stored as collapsed object
+} else {
+    $inv = @()
+}
 
 $itemName = ($Item -join ' ').Trim()
 
@@ -35,7 +44,13 @@ function Find-ItemIndex([string]$Name) {
 
 function Save-Inventory {
     $sheet.inventory = $inv
-    $sheet | ConvertTo-Json -Depth 10 | Set-Content $cachePath
+    $json = $sheet | ConvertTo-Json -Depth 10
+    # PS5.1 ConvertTo-Json collapses single-element arrays to plain objects.
+    # Detect this case and wrap the inventory block in array brackets.
+    if ($inv.Count -eq 1) {
+        $json = [regex]::Replace($json, '("inventory":\s+)(\{[^}]*\})', '$1[$2]')
+    }
+    $json | Set-Content $cachePath
 }
 
 # Validation
