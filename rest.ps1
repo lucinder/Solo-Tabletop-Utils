@@ -74,7 +74,7 @@ if ($shouldReset) {
 
     $slotObj = [PSCustomObject]@{}
     foreach ($key in ($newSlots.Keys | Sort-Object { [int]$_ })) {
-        $slotObj | Add-Member -NotePropertyName $key -NotePropertyValue $newSlots[$key]
+        $slotObj | Add-Member -MemberType NoteProperty -Name $key -Value $newSlots[$key]
     }
     $sheet.spell_slots = $slotObj
 
