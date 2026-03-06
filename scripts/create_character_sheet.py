@@ -54,7 +54,7 @@ def build_sheet(args):
             sheet.update(json.load(f))
     if args.name:
         sheet["name"] = args.name
-    if args.level:
+    if args.level is not None:
         sheet["level"] = args.level
     if args.pb:
         sheet["proficiency_bonus"] = args.pb
@@ -66,7 +66,7 @@ def build_sheet(args):
             sheet["stats"][stat] = arg_value
     if args.profs:
         sheet["proficiencies"] = [prof.strip() for prof in args.profs.split(",")]
-    if args.caster:
+    if args.caster is not None:
         sheet["caster_type"] = args.caster
     if args.spells:
         sheet["spells"] = {}
@@ -125,17 +125,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("-name", type=str, help="Name of the character (and output file, if not otherwise specified)")
-    parser.add_argument("-l", "--level", type=int, default=1, help="Character level (default: 1)")
+    parser.add_argument("-l", "--level", type=int, default=None, help="Character level (default: 1)")
     parser.add_argument("-pb", type=int, help="Proficiency bonus (default: calculated based on level)")
-    parser.add_argument("-str", type=int, default=10, help="Strength score (default: 10)")
-    parser.add_argument("-dex", type=int, default=10, help="Dexterity score (default: 10)")
-    parser.add_argument("-con", type=int, default=10, help="Constitution score (default: 10)")
-    parser.add_argument("-int", type=int, default=10, help="Intelligence score (default: 10)")
-    parser.add_argument("-wis", type=int, default=10, help="Wisdom score (default: 10)")
-    parser.add_argument("-cha", type=int, default=10, help="Charisma score (default: 10)")
+    parser.add_argument("-str", type=int, default=None, help="Strength score (default: 10)")
+    parser.add_argument("-dex", type=int, default=None, help="Dexterity score (default: 10)")
+    parser.add_argument("-con", type=int, default=None, help="Constitution score (default: 10)")
+    parser.add_argument("-int", type=int, default=None, help="Intelligence score (default: 10)")
+    parser.add_argument("-wis", type=int, default=None, help="Wisdom score (default: 10)")
+    parser.add_argument("-cha", type=int, default=None, help="Charisma score (default: 10)")
     parser.add_argument("-profs", type=str, help="Comma-separated list of proficiencies (e.g. \"Stealth, Perception\")")
     parser.add_argument("-spells", type=str, help="Comma-separated known spells in \"level:name\" format (e.g. \"0:Fire Bolt,1:Magic Missile\")")
-    parser.add_argument("-caster", type=str, choices=["full", "half", "warlock", "none"], default="none", help="Caster type. One of: full, half, warlock, or none (default: none); automatically generates spell slots")
+    parser.add_argument("-caster", type=str, choices=["full", "half", "warlock", "none"], default=None, help="Caster type. One of: full, half, warlock, or none (default: none); automatically generates spell slots")
     parser.add_argument("-i", "--input", type=str, help="File name to load character data from (sets values from the file, but can be overridden by other command line arguments)")
     parser.add_argument("-o", "--output", type=str, help="File name to save the character sheet to (default: character.json)")
     parser.add_argument("--interactive", action="store_true", help="If set, prompts the user for input instead of using command line arguments")
