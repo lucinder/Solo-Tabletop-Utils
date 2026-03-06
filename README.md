@@ -25,6 +25,17 @@ cast <spell name> -l <N>  # cast using exactly slot level N
 - With `-l`: uses exactly that level. Reports failure rather than escalating if unavailable.
 - Slot counts are saved back to `Character Sheets/CACHE.json` after each cast.
 
+## Rest
+Take a short or long rest, restoring spell slots where applicable.
+```powershell
+rest           # long rest (default)
+rest long
+rest short
+```
+- **Long rest**: restores spell slots for full, half, and warlock casters.
+- **Short rest**: restores spell slots for warlocks only.
+- Slot counts are recalculated from the character's level and caster type and saved to `Character Sheets/CACHE.json`.
+
 ## Character Sheet Generator (D&D 5e)
 Usage:
 ```powershell
@@ -43,7 +54,6 @@ Optional parameters:
 -profs: Comma-separated list of skill proficiencies. For expertise, add a * after the skill name.
 -caster: Caster type — full, half, warlock, or none (default: none). Auto-generates spell slots.
 -spells: Comma-separated known spells in "level:name" format (e.g. "0:Fire Bolt,1:Magic Missile").
--slots: Comma-separated spell slot counts in "level:count" format (e.g. "1:4,2:3"). Overrides -caster auto-generation.
 -i, --input: Input file to read character attributes from (attributes are overridden by CLI args).
 -o, --output: Output file to save attributes to (default: character.json in the Character Sheets folder).
 --interactive: Prompt the user interactively for character attributes rather than using command-line arguments.
