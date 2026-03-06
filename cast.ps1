@@ -68,7 +68,7 @@ function Use-Slot([int]$slotLevel) {
 # Manually specified slot level
 if ($Level -gt 0) {
     if ($Level -lt $spellBaseLevel) {
-        Write-Host "${RED}Cannot cast $($matched.Name) (level $spellBaseLevel) using a level $Level slot — slot level must be at least $spellBaseLevel.${RST}"
+        Write-Host "${RED}Cannot cast $($matched.Name) (level $spellBaseLevel) using a level $Level slot - slot level must be at least $spellBaseLevel.${RST}"
         exit
     }
     $count = Get-SlotCount $Level
