@@ -13,14 +13,16 @@ Usage:
   - -wis: wisdom score (default: 10)
   - -cha: charisma score (default: 10)
   - -profs: comma-separated list of proficiencies (e.g. "Stealth, Perception")
+  - -caster: caster type — full, half, warlock, or none (default: none); automatically generates spell slots
+  - -spells: comma-separated list of known spells in "level:name" format (e.g. "0:Fire Bolt,1:Magic Missile")
   - -i or --input: file name to load character data from (sets values from the file, but can be overridden by other command line arguments)
   - -o or --output: file name to save the character sheet to (default: character.json)
   - --interactive: if set, prompts the user for input instead of using command line arguments
 """
 
-import argparse, sys, json
+import argparse, sys, json, os
 from pathlib import Path
-from dnd_common import level_to_pb
+from dnd_common import level_to_pb, calc_spell_slots
 
 workspace = Path(__file__).parent.parent # Get working directory
 DEBUG = False
@@ -38,6 +40,9 @@ cached_sheet = {
         "cha": 10
     },
     "proficiencies": [],
+    "caster_type": "none",
+    "spells": {},
+    "spell_slots": {},
     "inventory":[]
 }
 
@@ -61,6 +66,17 @@ def build_sheet(args):
             sheet["stats"][stat] = arg_value
     if args.profs:
         sheet["proficiencies"] = [prof.strip() for prof in args.profs.split(",")]
+    if args.caster:
+        sheet["caster_type"] = args.caster
+    if args.spells:
+        sheet["spells"] = {}
+        for entry in args.spells.split(","):
+            level_str, _, name = entry.strip().partition(":")
+            sheet["spells"][name.strip()] = int(level_str.strip())
+    if sheet.get("caster_type", "none").lower() != "none":
+        sheet["spell_slots"] = calc_spell_slots(sheet["caster_type"], sheet["level"])
+    else:
+        sheet["spell_slots"] = {}
     return sheet
 
 def build_sheet_interactive(args):
@@ -75,6 +91,25 @@ def build_sheet_interactive(args):
         sheet["stats"][stat] = int(score_str) if score_str else 10
     profs_input = input("Proficiencies (comma-separated): ")
     sheet["proficiencies"] = [prof.strip() for prof in profs_input.split(",")] if profs_input else []
+    caster_input = input("Caster type (full/half/warlock/none, default: none): ").strip().lower() or "none"
+    sheet["caster_type"] = caster_input
+    spells_input = input("Known spells (comma-separated \"level:name\" pairs, e.g. \"0:Fire Bolt,1:Magic Missile\"): ")
+    sheet["spells"] = {}
+    if spells_input:
+        for entry in spells_input.split(","):
+            level_str, _, name = entry.strip().partition(":")
+            sheet["spells"][name.strip()] = int(level_str.strip())
+    if caster_input != "none":
+        sheet["spell_slots"] = calc_spell_slots(caster_input, sheet["level"])
+        print(f"Spell slots (auto-calculated): {sheet['spell_slots']}")
+        override = input("Override spell slots? (leave blank to keep, or enter \"level:count\" pairs): ").strip()
+        if override:
+            sheet["spell_slots"] = {}
+            for entry in override.split(","):
+                level_str, _, count_str = entry.strip().partition(":")
+                sheet["spell_slots"][level_str.strip()] = int(count_str.strip())
+    else:
+        sheet["spell_slots"] = {}
     return sheet
 
 def export_sheet(sheet, output_file):
@@ -99,6 +134,8 @@ def main():
     parser.add_argument("-wis", type=int, default=10, help="Wisdom score (default: 10)")
     parser.add_argument("-cha", type=int, default=10, help="Charisma score (default: 10)")
     parser.add_argument("-profs", type=str, help="Comma-separated list of proficiencies (e.g. \"Stealth, Perception\")")
+    parser.add_argument("-spells", type=str, help="Comma-separated known spells in \"level:name\" format (e.g. \"0:Fire Bolt,1:Magic Missile\")")
+    parser.add_argument("-caster", type=str, choices=["full", "half", "warlock", "none"], default="none", help="Caster type. One of: full, half, warlock, or none (default: none); automatically generates spell slots")
     parser.add_argument("-i", "--input", type=str, help="File name to load character data from (sets values from the file, but can be overridden by other command line arguments)")
     parser.add_argument("-o", "--output", type=str, help="File name to save the character sheet to (default: character.json)")
     parser.add_argument("--interactive", action="store_true", help="If set, prompts the user for input instead of using command line arguments")
@@ -111,7 +148,7 @@ def main():
     # Validate files
     if args.input:
         if DEBUG: print(f"[DEBUG] Checking if input file exists: {args.input}")
-        if not args.input.exists():
+        if not os.path.exists(args.input.strip()):
             print(f"[ERROR] File not found: {args.input}", file=sys.stderr)
             sys.exit(1)
         else:
