@@ -337,14 +337,22 @@ if ($TableName -ne "") {
                 $grpTotal = ($rolls | Measure-Object -Sum).Sum
             }
 
-            $parts = 0..($grp.NumDice-1) | ForEach-Object {
+            $parts = @(0..($grp.NumDice-1) | ForEach-Object {
                 if ($grp.KeepType -and -not $keepMask[$_]) { "${ST}$($rolls[$_])${RST}" } else { "$($rolls[$_])" }
-            }
+            })
             $str = if ($grp.NumDice -gt 1) { "[" + ($parts -join ", ") + "]" } else { $parts[0] }
             $diceDisplay += $str
 
             if ($g -lt $table.results.Count) {
                 $outcome = $table.results[$g].("$grpTotal")
+                if ($null -eq $outcome) {
+                    foreach ($prop in $table.results[$g].PSObject.Properties) {
+                        if ($prop.Name -match '^(\d+)-(\d+)$' -and $grpTotal -ge [int]$Matches[1] -and $grpTotal -le [int]$Matches[2]) {
+                            $outcome = $prop.Value
+                            break
+                        }
+                    }
+                }
                 $outcomes += if ($null -ne $outcome) { $outcome } else { "($grpTotal)" }
             }
         }
