@@ -1,0 +1,13 @@
+{
+    "roll":"1d20",
+    "results":[
+        {
+        "1-15": "No Encounters",
+        "16": "Encounter in the morning",
+        "17": "Encounter at the first rest stop",
+        "18": "Encounter in the afternoon",
+        "19": "Encounter in the evening or night",
+        "20": "One encounter in the morning, one in the evening or night"
+        }
+    ]
+}

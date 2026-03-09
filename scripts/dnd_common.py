@@ -44,6 +44,50 @@ def _full_slots_at(effective_level):
         slots["7"] += 1
     return slots
 
+spell_points_at_level = {
+    0: 0,
+    1: 4,
+    2: 6,
+    3: 14,
+    4: 17,
+    5: 27,
+    6: 32,
+    7: 38,
+    8: 44,
+    9: 57,
+    10: 64,
+    11: 73,
+    12: 73,
+    13: 83,
+    14: 83,
+    15: 94,
+    16: 94,
+    17: 107,
+    18: 114,
+    19: 123,
+    20: 133
+}
+spell_point_costs = {
+    1: 2,
+    2: 3,
+    3: 5,
+    4: 6,
+    5: 7,
+    6: 9,
+    7: 10,
+    8: 11,
+    9: 13
+}
+def _full_points_at(effective_level):
+    """
+    Calculate spell points for a full caster at the given effective level.
+    """
+    if effective_level > 20:
+        effective_level = 20
+    elif effective_level < 0:
+        effective_level = 0
+    return spell_points_at_level.get(effective_level, 0)
+
 def calc_spell_slots(caster_type, level):
     """
     Calculate spell slots given a caster type and character level.
@@ -71,3 +115,23 @@ def calc_spell_slots(caster_type, level):
         return {str(max_slot): count}
     else:
         return {}
+    
+def calc_spell_points(caster_type, level):
+    """
+    Calculate spell points given a caster type and character level.
+
+    caster_type: "full" | "half" | "warlock" | "none"
+    Returns an int representing the total spell points.
+    """
+    ct = caster_type.lower()
+    if ct == "full":
+        return _full_points_at(level)
+    elif ct == "half":
+        return _full_points_at(level // 2)
+    elif ct == "warlock": # Warlocks should generally never use spell points, but just in case, we calculate theirs as their maximum slots * the cost per that slot level.
+        slot_counts = calc_spell_slots(caster_type, level)
+        for slot in slot_counts.keys:
+            if slot_counts[slot] != 0:
+                return spell_point_costs[slot] * slot_counts[slot]
+    else:
+        return 0

@@ -15,6 +15,7 @@ Usage:
   - -profs: comma-separated list of proficiencies (e.g. "Stealth, Perception")
   - -caster: caster type — full, half, warlock, or none (default: none); automatically generates spell slots
   - -spells: comma-separated list of known spells in "level:name" format (e.g. "0:Fire Bolt,1:Magic Missile")
+  - --sp: if set, uses spell points instead of spell slots (only applicable if caster type is not none)
   - -i or --input: file name to load character data from (sets values from the file, but can be overridden by other command line arguments)
   - -o or --output: file name to save the character sheet to (default: character.json)
   - --interactive: if set, prompts the user for input instead of using command line arguments
@@ -22,7 +23,7 @@ Usage:
 
 import argparse, sys, json, os
 from pathlib import Path
-from dnd_common import level_to_pb, calc_spell_slots
+from dnd_common import level_to_pb, calc_spell_slots, calc_spell_points
 
 workspace = Path(__file__).parent.parent # Get working directory
 DEBUG = False
@@ -43,8 +44,20 @@ cached_sheet = {
     "caster_type": "none",
     "spells": {},
     "spell_slots": {},
+    "use_spell_points": False,
+    "spell_points": 0,
     "inventory":[]
 }
+
+def load_spell_resources(sheet):
+    if sheet.get("caster_type", "none").lower() != "none":
+        sheet["spell_slots"] = calc_spell_slots(sheet["caster_type"], sheet["level"])
+        sheet["spell_points"] = calc_spell_points(sheet["caster_type"], sheet["level"])
+    else:
+        sheet["spell_slots"] = {}
+        sheet["spell_points"] = 0
+    return sheet
+    
 
 def build_sheet(args):
     if DEBUG: print("[DEBUG] Building character sheet from command line arguments")
@@ -73,10 +86,9 @@ def build_sheet(args):
         for entry in args.spells.split(","):
             level_str, _, name = entry.strip().partition(":")
             sheet["spells"][name.strip()] = int(level_str.strip())
-    if sheet.get("caster_type", "none").lower() != "none":
-        sheet["spell_slots"] = calc_spell_slots(sheet["caster_type"], sheet["level"])
-    else:
-        sheet["spell_slots"] = {}
+    if args.sp:
+        sheet["use_spell_points"] = True
+    sheet = load_spell_resources(sheet)
     return sheet
 
 def build_sheet_interactive(args):
@@ -99,17 +111,10 @@ def build_sheet_interactive(args):
         for entry in spells_input.split(","):
             level_str, _, name = entry.strip().partition(":")
             sheet["spells"][name.strip()] = int(level_str.strip())
-    if caster_input != "none":
-        sheet["spell_slots"] = calc_spell_slots(caster_input, sheet["level"])
-        print(f"Spell slots (auto-calculated): {sheet['spell_slots']}")
-        override = input("Override spell slots? (leave blank to keep, or enter \"level:count\" pairs): ").strip()
-        if override:
-            sheet["spell_slots"] = {}
-            for entry in override.split(","):
-                level_str, _, count_str = entry.strip().partition(":")
-                sheet["spell_slots"][level_str.strip()] = int(count_str.strip())
-    else:
-        sheet["spell_slots"] = {}
+    sp_input = input("Should casting use Spell Points or Spell Slots? (points/slots): ").strip().lower() or "slots"
+    if sp_input == "points":
+        sheet["use_spell_points"] = True
+    sheet = load_spell_resources(sheet)
     return sheet
 
 def export_sheet(sheet, output_file):
@@ -136,6 +141,7 @@ def main():
     parser.add_argument("-profs", type=str, help="Comma-separated list of proficiencies (e.g. \"Stealth, Perception\")")
     parser.add_argument("-spells", type=str, help="Comma-separated known spells in \"level:name\" format (e.g. \"0:Fire Bolt,1:Magic Missile\")")
     parser.add_argument("-caster", type=str, choices=["full", "half", "warlock", "none"], default=None, help="Caster type. One of: full, half, warlock, or none (default: none); automatically generates spell slots")
+    parser.add_argument("--sp", action="store_true", help="If set, uses spell points instead of spell slots (only applicable if caster type is not none)")
     parser.add_argument("-i", "--input", type=str, help="File name to load character data from (sets values from the file, but can be overridden by other command line arguments)")
     parser.add_argument("-o", "--output", type=str, help="File name to save the character sheet to (default: character.json)")
     parser.add_argument("--interactive", action="store_true", help="If set, prompts the user for input instead of using command line arguments")
