@@ -47,9 +47,41 @@ if (-not $matched) {
 
 $spellBaseLevel = [int]$matched.Value
 
-# Cantrips (level 0) don't consume spell slots
+# Cantrips (level 0) don't consume spell slots or spell points
 if ($spellBaseLevel -eq 0) {
     Write-Host "Cast ${BOLD}$($matched.Name)${RST} as a cantrip."
+    exit
+}
+
+# Spell point costs by slot level (mirrors dnd_common.py spell_point_costs)
+$spellPointCosts = @{1=2; 2=3; 3=5; 4=6; 5=7; 6=9; 7=10; 8=11; 9=13}
+
+if ($sheet.use_spell_points) {
+    $currentPoints = [int]$sheet.spell_points
+
+    # Determine cast level
+    $castLevel = if ($Level -gt 0) { $Level } else { $spellBaseLevel }
+
+    if ($castLevel -lt $spellBaseLevel) {
+        Write-Host "${RED}Cannot cast $($matched.Name) (level $spellBaseLevel) at level $castLevel - cast level must be at least $spellBaseLevel.${RST}"
+        exit
+    }
+
+    $cost = $spellPointCosts[$castLevel]
+    if ($currentPoints -lt $cost) {
+        Write-Host "Not enough spell points to cast ${RED}$($matched.Name)${RST} at level $castLevel (costs $cost, have $currentPoints)."
+        exit
+    }
+
+    $sheet.spell_points = $currentPoints - $cost
+    $sheet | ConvertTo-Json -Depth 10 | Set-Content $cachePath
+
+    $remaining = $sheet.spell_points
+    if ($castLevel -gt $spellBaseLevel) {
+        Write-Host "Cast ${BOLD}$($matched.Name)${RST} ${YLW}(upcasted to level $castLevel)${RST} for $cost point$(if ($cost -ne 1) {'s'}). ($remaining point$(if ($remaining -ne 1) {'s'}) remaining)"
+    } else {
+        Write-Host "Cast ${BOLD}$($matched.Name)${RST} at level $castLevel for $cost point$(if ($cost -ne 1) {'s'}). ($remaining point$(if ($remaining -ne 1) {'s'}) remaining)"
+    }
     exit
 }
 
